@@ -1,9 +1,12 @@
-import 'package:chat_app/screens/auth.dart';
-import 'package:chat_app/screens/chat.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:chat_app/screens/splash.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
+
+
+import 'package:chat_app/screens/chat.dart';
+import 'package:chat_app/screens/auth.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -37,6 +40,11 @@ class App extends StatelessWidget {
           // - hasData : vrai si des données sont arrivées
           // - data : la donnée elle-même (ici un User? ou null)
           // - connectionState : état du stream (waiting, active, done...)
+
+          
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const SplashScreen();
+          }
 
           // Si snapshot.hasData est vrai, ça veut dire que l'utilisateur est connecté
           if (snapshot.hasData) {
