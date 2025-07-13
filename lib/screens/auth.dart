@@ -3,6 +3,7 @@ import 'dart:io';
 // Importation des widgets de base de Flutter
 
 import 'package:chat_app/widgets/user_image_picker.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 
@@ -35,6 +36,8 @@ class _AuthScreen extends State<AuthScreen> {
   var _isLogin = true;
 
   var _isAuthenticating = false;
+
+  var _enteredUsername = '';
 
   // Fonction déclenchée quand on clique sur le bouton Login/Signup
   void _submit() async {
@@ -78,6 +81,20 @@ class _AuthScreen extends State<AuthScreen> {
         ); //putFile() permet d'envoyer un fichier local(type File de dart) vers l'emplacement désigné par storageRef
         final imageUrl = await storageRef
             .getDownloadURL(); //getDownloadURL() recupère l'url publique (ou controlée par regles firebase ) de l'image stockée
+
+        await FirebaseFirestore.instance
+            .collection(
+              'users',
+            ) //une collection = un dossier dans la base qui contiendra les fiches de chaque user
+            .doc(
+              userCredentials.user!.uid,
+            ) //on crée ou remplace un document dont l'identifiant est le uid du user(celui generé par Firebase Auth à la creation du compte)
+            .set({
+              //on crée ou ecrase le contenu du document avec ces infos
+              'username': _enteredUsername,
+              'email': _enteredEmail,
+              'image_url': imageUrl,
+            });
       }
     } on FirebaseAuthException catch (error) {
       if (error.code == 'email-already-in-use') {
@@ -87,7 +104,7 @@ class _AuthScreen extends State<AuthScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(error.message ?? 'Authentification failed')),
       );
-    }finally{
+    } finally {
       setState(() {
         _isAuthenticating = false;
       });
@@ -160,6 +177,26 @@ class _AuthScreen extends State<AuthScreen> {
                               _enteredEmail = value!;
                             },
                           ),
+                          if(!_isLogin) //pour que ce champ s'affiche uniquement en mode inscription
+                            TextFormField(
+                              decoration: const InputDecoration(
+                                labelText: 'Username',
+                              ),
+                              enableSuggestions: false, //on desactive les suggestion automatiques du clavier
+                              validator: (value) { //verifier si ce qu'a saisi le user est correct
+                                if (value == null ||
+                                    value.isEmpty ||
+                                    value.trim().length < 4) {//si value est null, ou si la chaine est vide,ou si la long sans espace est < à 4 caractères on retourne un message d'erreur
+                                  return 'Please enter a valid username (at least 4 characters)';
+                                }
+                                return null;//sinon on retourne null, qui veut dire que c'est valide
+                              },
+                              //quand le form est sauvegardé avec form.save(), on recupere la valeur entrée pour la stocker
+                              //dans la variable _enteredUsername
+                              onSaved: (value) {
+                                _enteredUsername = value!;
+                              },
+                            ),
 
                           // Champ password
                           TextFormField(
@@ -183,11 +220,10 @@ class _AuthScreen extends State<AuthScreen> {
                           ),
 
                           const SizedBox(height: 12),
-                          if(_isAuthenticating)
+                          if (_isAuthenticating)
                             const CircularProgressIndicator()
-
                           else
-                          // Bouton de soumission (login/signup)
+                            // Bouton de soumission (login/signup)
                             ElevatedButton(
                               onPressed: _submit,
                               style: ElevatedButton.styleFrom(
@@ -198,19 +234,19 @@ class _AuthScreen extends State<AuthScreen> {
                               child: Text(_isLogin ? 'Login' : 'Signup'),
                             ),
                           // Lien pour basculer entre Login et Signup
-                            TextButton(
-                              onPressed: () {
-                                // On inverse l'état du bouton avec setState
-                                setState(() {
-                                  _isLogin = !_isLogin;
-                                });
-                              },
-                              child: Text(
-                                _isLogin
-                                    ? 'Create an account'
-                                    : 'I already have a account, Login.',
-                              ),
+                          TextButton(
+                            onPressed: () {
+                              // On inverse l'état du bouton avec setState
+                              setState(() {
+                                _isLogin = !_isLogin;
+                              });
+                            },
+                            child: Text(
+                              _isLogin
+                                  ? 'Create an account'
+                                  : 'I already have a account, Login.',
                             ),
+                          ),
                         ],
                       ),
                     ),
