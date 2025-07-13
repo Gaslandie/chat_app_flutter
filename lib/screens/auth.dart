@@ -1,4 +1,8 @@
+import 'dart:io';
+
 // Importation des widgets de base de Flutter
+
+import 'package:chat_app/widgets/user_image_picker.dart';
 import 'package:flutter/material.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -24,6 +28,8 @@ class _AuthScreen extends State<AuthScreen> {
   var _enteredEmail = '';
   var _enteredPassword = '';
 
+  File? _selectedImage;
+
   // Variable pour savoir si on est en mode login ou signup
   var _isLogin = true;
 
@@ -32,7 +38,8 @@ class _AuthScreen extends State<AuthScreen> {
     // On valide le formulaire (appel des validateurs des champs)
     final isvalid = _form.currentState!.validate();
 
-    if (!isvalid) {
+    if (!isvalid || !_isLogin && _selectedImage == null) {
+      //show error message...
       return;
     }
     // On sauvegarde les valeurs (déclenche les onSaved() de chaque champ)
@@ -44,7 +51,6 @@ class _AuthScreen extends State<AuthScreen> {
           email: _enteredEmail,
           password: _enteredPassword,
         );
-        print(userCredentials);
       } else {
         final userCredentials = await _firebase.createUserWithEmailAndPassword(
           email: _enteredEmail,
@@ -98,6 +104,12 @@ class _AuthScreen extends State<AuthScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          if (!_isLogin)
+                            UserImagePicker(
+                              onPickImage: (pickedImage) {
+                                _selectedImage = pickedImage;
+                              },
+                            ),
                           // Champ email
                           TextFormField(
                             decoration: const InputDecoration(
