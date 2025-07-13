@@ -3,6 +3,7 @@ import 'dart:io';
 // Importation des widgets de base de Flutter
 
 import 'package:chat_app/widgets/user_image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -33,6 +34,8 @@ class _AuthScreen extends State<AuthScreen> {
   // Variable pour savoir si on est en mode login ou signup
   var _isLogin = true;
 
+  var _isAuthenticating = false;
+
   // Fonction déclenchée quand on clique sur le bouton Login/Signup
   void _submit() async {
     // On valide le formulaire (appel des validateurs des champs)
@@ -46,6 +49,9 @@ class _AuthScreen extends State<AuthScreen> {
     _form.currentState!.save();
 
     try {
+      setState(() {
+        _isAuthenticating = true;
+      });
       if (_isLogin) {
         final userCredentials = await _firebase.signInWithEmailAndPassword(
           email: _enteredEmail,
@@ -56,6 +62,22 @@ class _AuthScreen extends State<AuthScreen> {
           email: _enteredEmail,
           password: _enteredPassword,
         );
+
+        //FirebaseStorage.instance: instace de Firebase Storage qu'on utilise
+        final storageRef = FirebaseStorage.instance
+            .ref() //donne accès à la racine de l'espace de stockage Firebase
+            .child(
+              'user_images',
+            ) //permet de structurer les fichiers dans le dossier user_images
+            .child(
+              '${userCredentials.user!.uid}.jpg',
+            ); //crée un fichier qui porte le nom unique du user (UID), parceque chaque user aura son image de profil stockeé sous user_images/<uid>.jpg
+
+        await storageRef.putFile(
+          _selectedImage!,
+        ); //putFile() permet d'envoyer un fichier local(type File de dart) vers l'emplacement désigné par storageRef
+        final imageUrl = await storageRef
+            .getDownloadURL(); //getDownloadURL() recupère l'url publique (ou controlée par regles firebase ) de l'image stockée
       }
     } on FirebaseAuthException catch (error) {
       if (error.code == 'email-already-in-use') {
@@ -65,6 +87,10 @@ class _AuthScreen extends State<AuthScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(error.message ?? 'Authentification failed')),
       );
+    }finally{
+      setState(() {
+        _isAuthenticating = false;
+      });
     }
   }
 
@@ -157,32 +183,34 @@ class _AuthScreen extends State<AuthScreen> {
                           ),
 
                           const SizedBox(height: 12),
+                          if(_isAuthenticating)
+                            const CircularProgressIndicator()
 
+                          else
                           // Bouton de soumission (login/signup)
-                          ElevatedButton(
-                            onPressed: _submit,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Theme.of(
-                                context,
-                              ).colorScheme.primaryContainer,
+                            ElevatedButton(
+                              onPressed: _submit,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Theme.of(
+                                  context,
+                                ).colorScheme.primaryContainer,
+                              ),
+                              child: Text(_isLogin ? 'Login' : 'Signup'),
                             ),
-                            child: Text(_isLogin ? 'Login' : 'Signup'),
-                          ),
-
                           // Lien pour basculer entre Login et Signup
-                          TextButton(
-                            onPressed: () {
-                              // On inverse l'état du bouton avec setState
-                              setState(() {
-                                _isLogin = !_isLogin;
-                              });
-                            },
-                            child: Text(
-                              _isLogin
-                                  ? 'Create an account'
-                                  : 'I already have a account, Login.',
+                            TextButton(
+                              onPressed: () {
+                                // On inverse l'état du bouton avec setState
+                                setState(() {
+                                  _isLogin = !_isLogin;
+                                });
+                              },
+                              child: Text(
+                                _isLogin
+                                    ? 'Create an account'
+                                    : 'I already have a account, Login.',
+                              ),
                             ),
-                          ),
                         ],
                       ),
                     ),
