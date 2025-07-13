@@ -1,17 +1,21 @@
+// Importation des fonctionnalités de gestion de fichiers
 import 'dart:io';
 
-// Importation des widgets de base de Flutter
-
+// Importation des widgets de base de Flutter et des packages utilisés
 import 'package:chat_app/widgets/user_image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
-
 import 'package:firebase_auth/firebase_auth.dart';
 
+// Référence à l'instance de Firebase Auth
 final _firebase = FirebaseAuth.instance;
 
-// Définition de l'écran d'authentification, c'est un StatefulWidget car on aura des données qui changent (email, password, mode login/signup)
+/// Écran d'authentification de l'application.
+/// Ce widget permet à l'utilisateur de :
+/// - Se connecter avec un email/mot de passe existant
+/// - Créer un nouveau compte avec image de profil et pseudo
+/// - Basculer entre login et inscription
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
 
@@ -21,148 +25,149 @@ class AuthScreen extends StatefulWidget {
   }
 }
 
-// La classe associée à AuthScreen
+/// Classe associée à l'écran d'authentification
+/// Utilise un `StatefulWidget` car l'état du formulaire change dynamiquement
 class _AuthScreen extends State<AuthScreen> {
-  // Clé globale pour identifier et gérer le formulaire
+  /// Clé pour identifier le formulaire et permettre sa validation
   final _form = GlobalKey<FormState>();
 
-  // Variables pour stocker ce que l'utilisateur tape
+  // Variables pour stocker les valeurs saisies dans le formulaire
   var _enteredEmail = '';
   var _enteredPassword = '';
-
+  var _enteredUsername = '';
   File? _selectedImage;
 
-  // Variable pour savoir si on est en mode login ou signup
+  /// Booléen pour déterminer si on est en mode connexion (true) ou inscription (false)
   var _isLogin = true;
 
+  /// Booléen pour afficher un indicateur de chargement lors de l'authentification
   var _isAuthenticating = false;
 
-  var _enteredUsername = '';
-
-  // Fonction déclenchée quand on clique sur le bouton Login/Signup
+  /// Fonction appelée lorsque l'utilisateur valide le formulaire
   void _submit() async {
-    // On valide le formulaire (appel des validateurs des champs)
-    final isvalid = _form.currentState!.validate();
+    // Validation des champs du formulaire
+    final isValid = _form.currentState!.validate();
 
-    if (!isvalid || !_isLogin && _selectedImage == null) {
-      //show error message...
+    // Si formulaire invalide ou pas d'image sélectionnée en mode signup → on quitte
+    if (!isValid || (!_isLogin && _selectedImage == null)) {
       return;
     }
-    // On sauvegarde les valeurs (déclenche les onSaved() de chaque champ)
+
+    // Sauvegarde des données saisies (déclenche les `onSaved` des champs)
     _form.currentState!.save();
 
     try {
+      // Active l'indicateur de chargement
       setState(() {
         _isAuthenticating = true;
       });
+
+      // Connexion utilisateur
       if (_isLogin) {
         final userCredentials = await _firebase.signInWithEmailAndPassword(
           email: _enteredEmail,
           password: _enteredPassword,
         );
-      } else {
+      }
+      // Inscription utilisateur
+      else {
         final userCredentials = await _firebase.createUserWithEmailAndPassword(
           email: _enteredEmail,
           password: _enteredPassword,
         );
 
-        //FirebaseStorage.instance: instace de Firebase Storage qu'on utilise
+        // Stockage de l'image de profil sur Firebase Storage
         final storageRef = FirebaseStorage.instance
-            .ref() //donne accès à la racine de l'espace de stockage Firebase
-            .child(
-              'user_images',
-            ) //permet de structurer les fichiers dans le dossier user_images
-            .child(
-              '${userCredentials.user!.uid}.jpg',
-            ); //crée un fichier qui porte le nom unique du user (UID), parceque chaque user aura son image de profil stockeé sous user_images/<uid>.jpg
+            .ref() // Racine du stockage
+            .child('user_images') // Dossier des images utilisateurs
+            .child('${userCredentials.user!.uid}.jpg'); // Nom unique pour chaque image
 
-        await storageRef.putFile(
-          _selectedImage!,
-        ); //putFile() permet d'envoyer un fichier local(type File de dart) vers l'emplacement désigné par storageRef
-        final imageUrl = await storageRef
-            .getDownloadURL(); //getDownloadURL() recupère l'url publique (ou controlée par regles firebase ) de l'image stockée
+        // Upload du fichier image
+        await storageRef.putFile(_selectedImage!);
 
+        // Récupération de l'URL publique de l'image
+        final imageUrl = await storageRef.getDownloadURL();
+
+        // Enregistrement des infos utilisateur dans Firestore
         await FirebaseFirestore.instance
-            .collection(
-              'users',
-            ) //une collection = un dossier dans la base qui contiendra les fiches de chaque user
-            .doc(
-              userCredentials.user!.uid,
-            ) //on crée ou remplace un document dont l'identifiant est le uid du user(celui generé par Firebase Auth à la creation du compte)
+            .collection('users')
+            .doc(userCredentials.user!.uid) // Doc avec même UID que l'utilisateur
             .set({
-              //on crée ou ecrase le contenu du document avec ces infos
               'username': _enteredUsername,
               'email': _enteredEmail,
               'image_url': imageUrl,
             });
       }
-    } on FirebaseAuthException catch (error) {
+    }
+
+    // Gestion des erreurs d'authentification
+    on FirebaseAuthException catch (error) {
       if (error.code == 'email-already-in-use') {
-        //...
+        // Optionnel : traitement spécifique si email déjà utilisé
       }
+      // Affichage d'un message via SnackBar
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(error.message ?? 'Authentification failed')),
       );
-    } finally {
+    }
+
+    // Quoi qu'il arrive, on désactive le chargement à la fin
+    finally {
       setState(() {
         _isAuthenticating = false;
       });
     }
   }
 
+  /// Construction de l'interface graphique
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Couleur de fond de l'écran : on prend celle du thème
+      // Couleur de fond de l'écran
       backgroundColor: Theme.of(context).colorScheme.primary,
 
-      // On centre verticalement et horizontalement le contenu
+      // Centrage vertical et horizontal du contenu
       body: Center(
         child: SingleChildScrollView(
-          // Permet de scroller si l'écran est petit (important sur mobile)
+          // Permet le scroll si le clavier masque les éléments
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Image du haut
+              // Logo ou image de présentation en haut
               Container(
-                margin: const EdgeInsets.only(
-                  top: 30,
-                  bottom: 20,
-                  left: 20,
-                  right: 20,
-                ),
+                margin: const EdgeInsets.all(20),
                 width: 200,
                 child: Image.asset('assets/images/chat.png'),
               ),
 
-              // La carte blanche contenant le formulaire
+              // Formulaire contenu dans une carte
               Card(
                 margin: const EdgeInsets.all(20),
                 child: SingleChildScrollView(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Form(
-                      key: _form, // Clé pour identifier ce formulaire
+                      key: _form, // Clé du formulaire
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          // Picker d'image uniquement en mode inscription
                           if (!_isLogin)
                             UserImagePicker(
                               onPickImage: (pickedImage) {
                                 _selectedImage = pickedImage;
                               },
                             ),
-                          // Champ email
+
+                          // Champ Email
                           TextFormField(
                             decoration: const InputDecoration(
-                              labelText: 'Email Adress',
+                              labelText: 'Email Address',
                             ),
                             keyboardType: TextInputType.emailAddress,
                             autocorrect: false,
                             textCapitalization: TextCapitalization.none,
-
-                            // Fonction de validation du champ email
                             validator: (value) {
                               if (value == null ||
                                   value.trim().isEmpty ||
@@ -171,72 +176,67 @@ class _AuthScreen extends State<AuthScreen> {
                               }
                               return null;
                             },
-
-                            // Quand on sauvegarde le formulaire, on récupère cette valeur
                             onSaved: (value) {
                               _enteredEmail = value!;
                             },
                           ),
-                          if(!_isLogin) //pour que ce champ s'affiche uniquement en mode inscription
+
+                          // Champ Username (uniquement inscription)
+                          if (!_isLogin)
                             TextFormField(
                               decoration: const InputDecoration(
                                 labelText: 'Username',
                               ),
-                              enableSuggestions: false, //on desactive les suggestion automatiques du clavier
-                              validator: (value) { //verifier si ce qu'a saisi le user est correct
+                              enableSuggestions: false,
+                              validator: (value) {
                                 if (value == null ||
                                     value.isEmpty ||
-                                    value.trim().length < 4) {//si value est null, ou si la chaine est vide,ou si la long sans espace est < à 4 caractères on retourne un message d'erreur
+                                    value.trim().length < 4) {
                                   return 'Please enter a valid username (at least 4 characters)';
                                 }
-                                return null;//sinon on retourne null, qui veut dire que c'est valide
+                                return null;
                               },
-                              //quand le form est sauvegardé avec form.save(), on recupere la valeur entrée pour la stocker
-                              //dans la variable _enteredUsername
                               onSaved: (value) {
                                 _enteredUsername = value!;
                               },
                             ),
 
-                          // Champ password
+                          // Champ Password
                           TextFormField(
                             decoration: const InputDecoration(
                               labelText: 'Password',
                             ),
-                            obscureText:
-                                true, // Masque le texte pour le mot de passe
-                            // Validation du mot de passe
+                            obscureText: true,
                             validator: (value) {
                               if (value == null || value.trim().length < 6) {
                                 return 'Password must be at least 6 characters long.';
                               }
                               return null;
                             },
-
-                            // Sauvegarde de la valeur du mot de passe
                             onSaved: (value) {
                               _enteredPassword = value!;
                             },
                           ),
 
                           const SizedBox(height: 12),
+
+                          // Indicateur de chargement ou bouton de soumission
                           if (_isAuthenticating)
                             const CircularProgressIndicator()
                           else
-                            // Bouton de soumission (login/signup)
                             ElevatedButton(
                               onPressed: _submit,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Theme.of(
-                                  context,
-                                ).colorScheme.primaryContainer,
+                                backgroundColor: Theme.of(context)
+                                    .colorScheme
+                                    .primaryContainer,
                               ),
                               child: Text(_isLogin ? 'Login' : 'Signup'),
                             ),
-                          // Lien pour basculer entre Login et Signup
+
+                          // Bouton pour basculer entre Login et Signup
                           TextButton(
                             onPressed: () {
-                              // On inverse l'état du bouton avec setState
                               setState(() {
                                 _isLogin = !_isLogin;
                               });
@@ -244,7 +244,7 @@ class _AuthScreen extends State<AuthScreen> {
                             child: Text(
                               _isLogin
                                   ? 'Create an account'
-                                  : 'I already have a account, Login.',
+                                  : 'I already have an account, Login.',
                             ),
                           ),
                         ],

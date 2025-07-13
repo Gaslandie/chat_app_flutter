@@ -1,66 +1,85 @@
+// Importation des dépendances nécessaires
 import 'package:chat_app/widgets/message_bubble.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+/// Widget qui affiche la liste des messages du chat en temps réel.
+/// Ce composant :
+/// - Écoute la collection `chat` dans Firestore via un Stream
+/// - Construit dynamiquement les messages avec `MessageBubble`
+/// - Affiche un indicateur de chargement, un message vide ou une erreur si nécessaire
 class ChatMessages extends StatelessWidget {
   const ChatMessages({super.key});
-  @override
-  //build qui construit l'interface graphique du widget
-  Widget build(BuildContext context) {
-    final authenticatedUser = FirebaseAuth.instance.currentUser;
-    return StreamBuilder(
-      //StreamBuilder est un widget reactif qui ecoute un flux (stream) et qui construit automatiquement son
-      //contenu à chaque nouvel evenement (comme ici une mise à jour des message). c'est lui qui gere les changements de données , donc pas besoin d'un Statefulwidget ici
 
-      //le flux ecouté est celui de la collection chat dans firebase. chaque fois qu'un message est ajouté/supprimé/modifier, le stream envoie un evenement, et le StreamBuilder
-      //reconstrui son enfant
+  /// Méthode qui construit l'interface graphique du widget
+  @override
+  Widget build(BuildContext context) {
+    // Récupération de l'utilisateur actuellement connecté via Firebase Auth
+    final authenticatedUser = FirebaseAuth.instance.currentUser;
+
+    return StreamBuilder(
+      /// StreamBuilder : widget réactif qui écoute un flux (ici la collection 'chat')
+      /// et reconstruit son contenu à chaque événement (ajout/modif/suppression)
       stream: FirebaseFirestore.instance
           .collection('chat')
-          .orderBy('createdAt', descending: true)
+          .orderBy('createdAt', descending: true) // Messages du plus récent au plus ancien
           .snapshots(),
 
-      //tant que la connexion avec firestore est en cours et qu'aucune donnée n'a encore été reçu, on affiche un CircularProgressIndicator
+      /// Construction de l'interface en fonction de l'état de connexion et des données reçues
       builder: (ctx, chatSnapshots) {
+        // Si la connexion au flux est encore en cours, on affiche un loader
         if (chatSnapshots.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
-        //Si aucune données n'est presente (pas encore de messages dans firebase), on affiche un message indiquant qu'il n'ya aucun message
+
+        // Si aucune donnée reçue ou aucune discussion dans la collection
         if (!chatSnapshots.hasData || chatSnapshots.data!.docs.isEmpty) {
           return const Center(child: Text('No messages found.'));
         }
-        //s'il ya une erreur
+
+        // Si une erreur s'est produite lors de la récupération des données
         if (chatSnapshots.hasError) {
           return const Center(child: Text('Something went wrong...'));
         }
 
-        //on recupere la liste des documents(messages) presents dans chat
+        // On récupère la liste des documents (messages) dans la collection 'chat'
         final loadedMessages = chatSnapshots.data!.docs;
 
-        //on retourne une listeView.builder qui crée dynamiquement un widget Text pour chaque
-        //message recupéré dans la collection
+        // Affichage de la liste des messages via ListView.builder (optimisé car dynamique)
         return ListView.builder(
           padding: const EdgeInsets.only(bottom: 40, left: 13, right: 13),
-          reverse: true,
+          reverse: true, // Pour afficher les messages les plus récents en bas
           itemCount: loadedMessages.length,
+
+          // Construction de chaque élément (message) de la liste
           itemBuilder: (ctx, index) {
+            // Message actuel
             final chatMessage = loadedMessages[index].data();
+
+            // Message suivant dans la liste (s'il existe)
             final nextChatMessage = index + 1 < loadedMessages.length
                 ? loadedMessages[index + 1].data()
                 : null;
 
+            // ID de l'utilisateur émetteur du message actuel et suivant
             final currentMessageUserId = chatMessage['userId'];
             final nextMessageUserId = nextChatMessage != null
                 ? nextChatMessage['userId']
                 : null;
 
+            // Vérifie si l'utilisateur du message suivant est le même que celui du message actuel
             final nextUserIsSame = nextMessageUserId == currentMessageUserId;
+
+            // Si même utilisateur → MessageBubble.next (sans avatar ni nom)
             if (nextUserIsSame) {
               return MessageBubble.next(
                 message: chatMessage['text'],
                 isMe: authenticatedUser!.uid == currentMessageUserId,
               );
-            } else {
+            }
+            // Sinon → MessageBubble.first (avec avatar et nom)
+            else {
               return MessageBubble.first(
                 userImage: chatMessage['userImage'],
                 username: chatMessage['username'],

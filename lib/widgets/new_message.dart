@@ -1,7 +1,14 @@
+// Importation des dépendances nécessaires
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+/// Widget permettant d’écrire et d’envoyer un nouveau message dans le chat.
+/// Ce composant :
+/// - Affiche un champ texte pour saisir un message
+/// - Gère l’envoi du message dans Firestore
+/// - Attache les infos de l’utilisateur (pseudo, image)
+/// - Vide le champ et masque le clavier après envoi
 class NewMessage extends StatefulWidget {
   const NewMessage({super.key});
 
@@ -11,72 +18,78 @@ class NewMessage extends StatefulWidget {
   }
 }
 
+/// Classe associée au widget NewMessage.
+/// Utilise un `StatefulWidget` car le champ texte et son contenu changent.
 class _NewMessage extends State<NewMessage> {
-  var _messageController = TextEditingController();
+  /// Contrôleur pour gérer le contenu du champ texte.
+  final _messageController = TextEditingController();
 
+  /// Méthode appelée automatiquement lorsque le widget est retiré de l’arbre
+  /// On en profite pour libérer proprement le contrôleur.
   @override
   void dispose() {
     _messageController.dispose();
     super.dispose();
   }
 
-  //fonction appelée quand le user veut envoyer un message
-  //asynchrone car on va interagir avec FireStore
+  /// Fonction déclenchée lorsqu’on appuie sur le bouton d’envoi
+  /// Asynchrone car elle interagit avec Firestore.
   void _submitMessage() async {
-
-    //recuperation du texte actuellement dans le champ texte du message
+    // Récupération du texte actuellement saisi
     final enteredMessage = _messageController.text;
 
-    //si le message est vide ou ne contient que des espace, on quitte la fonction
-    //pour eviter d'envoyer des messages vides dans la bd
+    // Si le champ est vide ou contient uniquement des espaces, on annule l’envoi
     if (enteredMessage.trim().isEmpty) {
       return;
     }
 
-    //retire le focus du champs text, pour masquer le clavier après avoir envoyé le message
+    // Retire le focus du champ texte pour masquer le clavier
     FocusScope.of(context).unfocus();
-    _messageController.clear();//vide le champs texte après envoie, pour le remettre propre pour le prochain message
 
-    //reupere l'utilisateur actuellement connecté via Firebase Auth
-    //le ! signifie qu'on est certain qu'il ya un utilisateur (car sinon cette fonction ne devrait pas etre accessible)
+    // Vide le champ texte après envoi
+    _messageController.clear();
+
+    // Récupère l’utilisateur actuellement connecté
     final user = FirebaseAuth.instance.currentUser!;
-    //va chercher dans Firestore , dans la collection users, le document coresspondant au user actuel grâce à son uid
-    //parce qu'on a besoin de ses infos associés(username et image) pour les attacher au message
+
+    // Récupère les infos associées à l’utilisateur (pseudo, image)
     final userData = await FirebaseFirestore.instance
         .collection('users')
         .doc(user.uid)
         .get();
 
-    //on ajoute un nouveau document dans la collection chat
-    //pour stocker chaque message comme un document independant dans Firestore
+    // Ajout d’un nouveau message dans la collection 'chat'
     FirebaseFirestore.instance.collection('chat').add({
-      'text': enteredMessage,
-      'createdAt': Timestamp.now(),
-      'userId': user.uid,
-      'username': userData.data()!['username'],
-      'userImage': userData.data()!['image_url'],
+      'text': enteredMessage, // Contenu du message
+      'createdAt': Timestamp.now(), // Horodatage pour l’ordre d’affichage
+      'userId': user.uid, // UID de l’expéditeur
+      'username': userData.data()!['username'], // Pseudo de l’utilisateur
+      'userImage': userData.data()!['image_url'], // URL de l’image de profil
     });
   }
 
+  /// Construction de l’interface graphique
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(left: 15, right: 1, bottom: 14),
       child: Row(
         children: [
+          // Champ texte étirable (prend tout l’espace restant)
           Expanded(
             child: TextField(
-              controller: _messageController,
-              textCapitalization: TextCapitalization.sentences,
+              controller: _messageController, // Contrôleur du champ
+              textCapitalization: TextCapitalization.sentences, // Majuscule automatique en début de phrase
               autocorrect: true,
               enableSuggestions: true,
               decoration: const InputDecoration(labelText: 'Send a message...'),
             ),
           ),
+          // Bouton d’envoi
           IconButton(
             color: Theme.of(context).colorScheme.primary,
-            onPressed: _submitMessage,
-            icon: Icon(Icons.send),
+            onPressed: _submitMessage, // Action : envoyer le message
+            icon: const Icon(Icons.send),
           ),
         ],
       ),
